@@ -30,10 +30,14 @@ pub async fn setup_client_jar<D: Send + Sync>(
         let client_jar = client_folder.join(format!("{}.jar", &version_profile.id));
 
         // Add client jar to class path
+        let jar_abs = client_jar.absolutize().context("Failed to resolve client JAR absolute path")?;
+        let jar_str = jar_abs
+            .to_str()
+            .context("Client JAR path contains non-UTF-8 characters")?;
         write!(
             class_path,
             "{}{}",
-            &client_jar.absolutize().unwrap().to_str().unwrap(),
+            jar_str,
             OS.get_path_separator()?
         )?;
 

@@ -20,7 +20,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use std::process::exit;
+
 
 use anyhow::{bail, Context, Result};
 
@@ -28,7 +28,6 @@ use path_absolutize::Absolutize;
 use tracing::*;
 
 use crate::app::client_api::{Client, LaunchManifest};
-use crate::auth::ClientAccount;
 use crate::error::LauncherError;
 use crate::minecraft::java::{DistributionSelection, JavaRuntime};
 use crate::minecraft::progress::{ProgressReceiver, ProgressUpdate};
@@ -164,15 +163,9 @@ pub async fn launch<D: Send + Sync>(
     )?;
 
     // Launcher Args (-D<name>=<value>)
-    command_arguments.push(format!("-Dnet.ccbluex.liquidbounce.api.url={}", launching_parameter.client.url()));
-    command_arguments.push(format!("-Dnet.ccbluex.liquidbounce.api.secure={}", launching_parameter.client.is_secure()));
-    command_arguments.push(format!("-Dnet.ccbluex.liquidbounce.api.token={}", launching_parameter.client.session_token()));
-    
-    if let Some(client_account) = &launching_parameter.client_account {
-        command_arguments.push(format!("-Dnet.ccbluex.liquidbounce.account.access_token={}", client_account.get_access_token().secret()));
-        command_arguments.push(format!("-Dnet.ccbluex.liquidbounce.account.refresh_token={}", client_account.get_refresh_token().secret()));
-        command_arguments.push(format!("-Dnet.ccbluex.liquidbounce.account.expires_at={}", client_account.get_expires_at()));
-    }
+    command_arguments.push(format!("-Dcom.amt.client.api.url={}", launching_parameter.client.url()));
+    command_arguments.push(format!("-Dcom.amt.client.api.secure={}", launching_parameter.client.is_secure()));
+    command_arguments.push(format!("-Dcom.amt.client.api.token={}", launching_parameter.client.session_token()));
     
     // Custom Arguments
     command_arguments.extend(launching_parameter.jvm_args.iter().cloned());
@@ -201,10 +194,16 @@ pub async fn launch<D: Send + Sync>(
                 "auth_player_name" => output.push_str(&launching_parameter.auth_player_name),
                 "version_name" => output.push_str(&version_profile.id),
                 "game_directory" => {
-                    output.push_str(game_dir.absolutize().unwrap().to_str().unwrap())
+                    let abs = game_dir.absolutize()
+                        .map_err(|e| anyhow::anyhow!("Failed to resolve game directory: {e}"))?;
+                    output.push_str(abs.to_str()
+                        .ok_or_else(|| anyhow::anyhow!("Game directory path contains non-UTF-8 characters"))?)
                 }
                 "assets_root" => {
-                    output.push_str(assets_folder.absolutize().unwrap().to_str().unwrap())
+                    let abs = assets_folder.absolutize()
+                        .map_err(|e| anyhow::anyhow!("Failed to resolve assets root: {e}"))?;
+                    output.push_str(abs.to_str()
+                        .ok_or_else(|| anyhow::anyhow!("Assets root path contains non-UTF-8 characters"))?)
                 }
                 "assets_index_name" => output.push_str(&asset_index_location.id),
                 "auth_uuid" => output.push_str(&launching_parameter.auth_uuid),
@@ -212,9 +211,12 @@ pub async fn launch<D: Send + Sync>(
                 "user_type" => output.push_str(&launching_parameter.user_type),
                 "version_type" => output.push_str(&version_profile.version_type),
                 "natives_directory" => {
-                    output.push_str(natives_folder.absolutize().unwrap().to_str().unwrap())
+                    let abs = natives_folder.absolutize()
+                        .map_err(|e| anyhow::anyhow!("Failed to resolve natives directory: {e}"))?;
+                    output.push_str(abs.to_str()
+                        .ok_or_else(|| anyhow::anyhow!("Natives directory path contains non-UTF-8 characters"))?)
                 }
-                "launcher_name" => output.push_str("LiquidLauncher"),
+                "launcher_name" => output.push_str("AMT Client"),
                 "launcher_version" => output.push_str(LAUNCHER_VERSION),
                 "classpath" => output.push_str(&class_path),
                 "user_properties" => output.push_str("{}"),
@@ -234,10 +236,8 @@ pub async fn launch<D: Send + Sync>(
 
     launcher_data.progress_update(ProgressUpdate::set_label("Running..."));
 
-    if !launching_parameter.keep_launcher_open {
-        // Hide launcher window
-        launcher_data.hide_window();
-    }
+    // Hide launcher window during gameplay
+    launcher_data.hide_window();
 
     let terminator = launcher_data.terminator;
     let data = launcher_data.data;
@@ -251,11 +251,6 @@ pub async fn launch<D: Send + Sync>(
             &data,
         )
         .await?;
-
-    if !launching_parameter.keep_launcher_open {
-        // Hide launcher window
-        exit(0);
-    }
 
     Ok(())
 }
@@ -274,8 +269,8 @@ pub struct StartParameter {
     pub keep_launcher_open: bool,
     pub concurrent_downloads: u32,
     pub client: Client,
-    pub client_account: Option<ClientAccount>,
     pub skip_advertisement: bool,
+    pub vanilla_mode: bool,
 }
 
 fn process_templates<F: Fn(&mut String, &str) -> Result<()>>(

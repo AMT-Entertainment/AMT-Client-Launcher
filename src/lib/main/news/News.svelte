@@ -1,7 +1,6 @@
 <script>
     import {openUrl} from "@tauri-apps/plugin-opener";
 
-    export let postUid;
     export let title;
     export let date;
     export let bannerText;
@@ -9,7 +8,7 @@
     export let description;
 
     async function handleShowNews(e) {
-        await openUrl("https://liquidbounce.net/blog/article/" + postUid);
+        await openUrl("https://github.com/AMT-org/amt-client/releases");
     }
 </script>
 
@@ -30,11 +29,11 @@
 
 <style>
     .news {
-        height: 170px;
         display: grid;
-        grid-template-columns: 2fr 3fr;
+        grid-template-columns: 220px 1fr;
         border-radius: 12px;
-        overflow: hidden;
+        height: auto;
+        min-height: 100px;
     }
 
     .banner {

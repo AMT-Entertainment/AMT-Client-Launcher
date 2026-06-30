@@ -1,61 +1,75 @@
 <script>
-    import SocialBar from "../../common/social/SocialBar.svelte";
+    import { onMount } from "svelte";
     import News from "./News.svelte";
     import {invoke} from "@tauri-apps/api/core";
 
     export let client;
 
     let news = [];
+    let loading = true;
 
-    // TODO: Might support pagination in the future
-    invoke("fetch_blog_posts", {
-        client,
-        page: 1
-    }).then((onlineNews) => {
-        news = onlineNews.items;
-    }).catch((e) => console.error(e));
+    onMount(() => {
+        invoke("fetch_blog_posts", {
+            client,
+            page: 1
+        }).then((onlineNews) => {
+            news = onlineNews.items || [];
+            loading = false;
+        }).catch((e) => {
+            console.error(e);
+            loading = false;
+        });
+    });
 </script>
 
 <div class="news-area">
-    <div class="news-wrapper">
-        {#each news as n}
-            <News {...n} />
-        {/each}
-    </div>
-
-    <button class="button-scroll">
-        <img class="icon" src="img/icon/icon-news-scroll.svg" alt="scroll" />
-    </button>
-
-    <div class="social-bar-wrapper">
-        <SocialBar />
-    </div>
+    {#if loading}
+        <div class="news-loading">
+            <div class="amt-skeleton" style="height: 80px; width: 100%;"></div>
+        </div>
+    {:else if news.length === 0}
+        <div class="news-empty">
+            <p>No news yet</p>
+        </div>
+    {:else}
+        <div class="news-wrapper">
+            {#each news as n}
+                <News {...n} />
+            {/each}
+        </div>
+    {/if}
 </div>
 
 <style>
-    .social-bar-wrapper {
-        display: flex;
-        justify-content: flex-end;
-    }
-
     .news-area {
         display: flex;
         flex-direction: column;
-        overflow: hidden;
+        flex: 1;
     }
 
     .news-wrapper {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        grid-auto-rows: max-content;
-        overflow: auto;
-        flex: 1;
-        gap: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        overflow-y: auto;
     }
 
-    .button-scroll {
-        background-color: transparent;
-        border: none;
-        margin: 20px 0;
+    .news-loading {
+        padding: 8px 0;
+    }
+
+    .news-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+        text-align: center;
+        color: var(--amt-text-muted);
+        font-size: 13px;
+    }
+
+    .news-empty p {
+        margin: 4px 0;
     }
 </style>

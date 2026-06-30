@@ -15,7 +15,8 @@
         background-color: rgba(0, 0, 0, 0.26);
         border-radius: 6px;
         margin-bottom: 10px;
-        overflow: hidden;
+        overflow-x: auto;
+        flex-shrink: 0;
     }
 
     .tab {

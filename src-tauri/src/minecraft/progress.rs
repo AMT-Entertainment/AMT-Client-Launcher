@@ -21,7 +21,7 @@ use serde::Serialize;
 
 #[derive(Debug)]
 pub enum ProgressUpdateSteps {
-    DownloadLiquidBounceMods,
+    DownloadMods,
     DownloadJRE,
     DownloadClientJar,
     DownloadLibraries,
@@ -43,7 +43,7 @@ impl ProgressUpdateSteps {
 
     fn step_idx(&self) -> usize {
         match self {
-            ProgressUpdateSteps::DownloadLiquidBounceMods => 0,
+            ProgressUpdateSteps::DownloadMods => 0,
             ProgressUpdateSteps::DownloadJRE => 1,
             ProgressUpdateSteps::DownloadClientJar => 2,
             ProgressUpdateSteps::DownloadLibraries => 3,

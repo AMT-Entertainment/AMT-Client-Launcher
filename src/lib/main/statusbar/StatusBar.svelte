@@ -5,7 +5,7 @@
 <style>
     .status-bar {
         background-color: rgba(0, 0, 0, 0.36);
-        height: 50px;
+        min-height: 50px;
         display: flex;
         flex: 1;
         border-radius: 6px;

@@ -17,7 +17,7 @@
  * along with LiquidLauncher. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::io::AsyncReadExt;
@@ -56,8 +56,14 @@ impl JavaRuntime {
         terminator: Receiver<()>,
         data: &D,
     ) -> Result<()> {
-        let mut stdout = running_task.stdout.take().unwrap();
-        let mut stderr = running_task.stderr.take().unwrap();
+        let mut stdout = running_task
+            .stdout
+            .take()
+            .context("Failed to take stdout from child process")?;
+        let mut stderr = running_task
+            .stderr
+            .take()
+            .context("Failed to take stderr from child process")?;
 
         let mut stdout_buf = vec![0; 1024];
         let mut stderr_buf = vec![0; 1024];

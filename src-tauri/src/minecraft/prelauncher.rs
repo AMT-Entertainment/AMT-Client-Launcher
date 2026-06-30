@@ -19,16 +19,12 @@
 
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
-use async_zip::read::mem::ZipFileReader;
+use anyhow::{bail, Context, Result};
 use tokio::fs;
-use tokio::io::AsyncReadExt;
 use tracing::*;
 
-use crate::app::client_api::{Client, LaunchManifest, LoaderMod, LoaderSubsystem, ModSource};
+use crate::app::client_api::{LaunchManifest, LoaderMod, LoaderSubsystem, ModSource};
 use crate::app::gui::ShareableWindow;
-use crate::app::webview::open_download_page;
-use crate::auth::ClientAccount;
 use crate::error::LauncherError;
 use crate::minecraft::launcher;
 use crate::minecraft::launcher::{LauncherData, StartParameter};
@@ -64,7 +60,6 @@ pub(crate) async fn launch(
         })
         .await?;
 
-    let client = &launching_parameter.client;
     let build = &launch_manifest.build;
     let subsystem = &launch_manifest.subsystem;
 
@@ -74,42 +69,52 @@ pub(crate) async fn launch(
         .map(|x| x.into())
         .unwrap_or_else(|| LAUNCHER_DIRECTORY.data_dir().to_path_buf());
 
-    let retriever_account = if launching_parameter.skip_advertisement {
-        &launching_parameter.client_account
+    // Skip mods in vanilla mode
+    if !launching_parameter.vanilla_mode {
+        clear_mods(&data_directory, &launch_manifest).await?;
+        retrieve_and_copy_mods(
+            &data_directory,
+            &launch_manifest,
+            &launch_manifest.mods,
+            &launcher_data,
+        )
+        .await?;
+        retrieve_and_copy_mods(
+            &data_directory,
+            &launch_manifest,
+            &additional_mods,
+            &launcher_data,
+        )
+        .await?;
     } else {
-        &None
-    };
-
-    // Copy retrieve and copy mods from manifest
-    clear_mods(&data_directory, &launch_manifest).await?;
-    retrieve_and_copy_mods(
-        &data_directory,
-        &launch_manifest,
-        &launch_manifest.mods,
-        client,
-        retriever_account,
-        &launcher_data,
-    )
-    .await?;
-    retrieve_and_copy_mods(
-        &data_directory,
-        &launch_manifest,
-        &additional_mods,
-        client,
-        retriever_account,
-        &launcher_data,
-    )
-    .await?;
+        launcher_data.log("Vanilla mode: skipping mod installation");
+    }
 
     launcher_data.progress_update(ProgressUpdate::set_label("Loading version profile..."));
-    let manifest_url = match subsystem {
-        LoaderSubsystem::Fabric { manifest, .. } => manifest
-            .replace("{MINECRAFT_VERSION}", &build.mc_version)
-            .replace(
-                "{FABRIC_LOADER_VERSION}",
-                &build.subsystem_specific_data.fabric_loader_version,
-            ),
-        LoaderSubsystem::Forge { manifest, .. } => manifest.clone(),
+    let manifest_url = if launching_parameter.vanilla_mode {
+        let vanilla_version = mc_version_manifest.versions.iter()
+            .find(|v| v.id == build.mc_version)
+            .ok_or_else(|| anyhow::anyhow!("Vanilla version {} not found in manifest", build.mc_version))?;
+        vanilla_version.url.clone()
+    } else {
+        match &subsystem {
+            LoaderSubsystem::Fabric { manifest, .. } => {
+                let url = manifest
+                    .replace("{MINECRAFT_VERSION}", &build.mc_version)
+                    .replace("{FABRIC_LOADER_VERSION}", &build.subsystem_specific_data.fabric_loader_version);
+                if !url.starts_with("http") {
+                    let fallback = format!(
+                        "https://meta.fabricmc.net/v2/versions/loader/{}/{}/profile/json",
+                        build.mc_version, build.subsystem_specific_data.fabric_loader_version
+                    );
+                    warn!("Malformed Fabric manifest URL '{}', falling back to '{}'", url, fallback);
+                    fallback
+                } else {
+                    url
+                }
+            }
+            LoaderSubsystem::Forge { manifest, .. } => manifest.clone(),
+        }
     };
     let mut version = (|| async { VersionProfile::load(&manifest_url).await })
         .retry(ExponentialBuilder::default())
@@ -194,8 +199,6 @@ pub async fn retrieve_and_copy_mods(
     data: &Path,
     manifest: &LaunchManifest,
     mods: &Vec<LoaderMod>,
-    client: &Client,
-    client_account: &Option<ClientAccount>,
     launcher_data: &LauncherData<ShareableWindow>,
 ) -> Result<()> {
     let mod_cache_path = data.join("mod_cache");
@@ -265,87 +268,25 @@ pub async fn retrieve_and_copy_mods(
         // Do we need to download the mod?
         if !current_mod_path.exists() {
             // Make sure that the parent directory exists
-            fs::create_dir_all(&current_mod_path.parent().unwrap()).await?;
+            let parent = current_mod_path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("Mod path has no parent directory: {}", current_mod_path.display()))?;
+            fs::create_dir_all(parent).await?;
 
             let contents = match &current_mod.source {
-                ModSource::SkipAd {
-                    artifact_name: _,
-                    url,
-                    extract,
-                } => {
-                    launcher_data.log(&format!(
-                        "Opening download page for mod {} on {}",
-                        current_mod.name, url
-                    ));
-                    launcher_data.progress_update(ProgressUpdate::set_label(format!(
-                        "Opening download page for mod {}",
-                        current_mod.name
-                    )));
-
-                    let pid = match client_account {
-                        Some(account) => {
-                            // PID is taken from the URL which is the last part of the URL
-                            // https://dl.liquidbounce.net/skip/c7kMT2q00U -> c7kMT2q00U
-                            let pid = url.split('/').last().context("Failed to get PID")?;
-                            let skip_file_resolve =
-                                client.resolve_skip_file(account, pid).await?;
-                            
-                            // If the skip file resolve has a target PID, use it - 
-                            // if not, it means that the account is not allowed for direct downloads
-                            skip_file_resolve.target_pid.ok_or_else(|| {
-                                anyhow!("Failed to get direct URL for mod {}", current_mod.name)
-                            })?
-                        }
-                        None => open_download_page(url, launcher_data).await?,
-                    };
-                    
-                    // Download the mod
-                    let url = client.get_direct_download_link(&pid);
-                    launcher_data.log(&format!(
-                        "Downloading mod {} from {}",
-                        current_mod.name, url
-                    ));
-                    launcher_data.progress_update(ProgressUpdate::set_label(format!(
-                        "Downloading mod {}",
-                        current_mod.name
-                    )));
-                    
-                    let retrieved_bytes = download_file(&url, |a, b| {
-                        launcher_data.progress_update(ProgressUpdate::set_for_step(
-                            ProgressUpdateSteps::DownloadLiquidBounceMods,
-                            get_progress(mod_idx, a, b),
-                            max,
-                        ))
-                    })
-                    .await?;
-
-                    // Extract bytes
-                    if *extract {
-                        let reader = ZipFileReader::new(retrieved_bytes).await?;
-
-                        // Find .JAR file in archive and get index of it
-                        let index_of_file_to_extract = reader
-                            .file()
-                            .entries()
-                            .iter()
-                            .position(|x| x.entry().filename().ends_with(".jar"))
-                            .ok_or_else(|| {
-                                LauncherError::InvalidVersionProfile(
-                                    "There is no JAR in the downloaded archive".to_string(),
-                                )
-                            })?;
-                        let entry = reader.file().entries()[index_of_file_to_extract].entry();
-
-                        // Read file to extract
-                        let mut entry_reader = reader.entry(index_of_file_to_extract).await?;
-
-                        let mut output = Vec::with_capacity(entry.uncompressed_size() as usize);
-                        entry_reader.read_to_end(&mut output).await?;
-
-                        output
-                    } else {
-                        retrieved_bytes
-                    }
+                ModSource::SkipAd { url, .. } => {
+                    launcher_data.log(&format!("Downloading mod {} from {}", current_mod.name, url));
+                    download_file(
+                        url,
+                        |a, b| {
+                            launcher_data.progress_update(ProgressUpdate::set_for_step(
+                                ProgressUpdateSteps::DownloadMods,
+                                get_progress(mod_idx, a, b),
+                                max,
+                            ));
+                        },
+                    )
+                    .await?
                 }
                 ModSource::Repository {
                     repository,
@@ -364,7 +305,7 @@ pub async fn retrieve_and_copy_mods(
                         &format!("{}{}", repository_url, get_maven_artifact_path(artifact)?),
                         |a, b| {
                             launcher_data.progress_update(ProgressUpdate::set_for_step(
-                                ProgressUpdateSteps::DownloadLiquidBounceMods,
+                                ProgressUpdateSteps::DownloadMods,
                                 get_progress(mod_idx, a, b),
                                 max,
                             ));

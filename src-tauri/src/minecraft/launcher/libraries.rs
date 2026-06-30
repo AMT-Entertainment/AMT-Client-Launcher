@@ -120,11 +120,12 @@ pub async fn setup_libraries<D: Send + Sync>(
                     .with_context(|| format!("Failed to download library: {}", &library.name))?;
 
                 // Natives are not included in the classpath
-                return if library.natives.is_none() {
-                    return Ok(path.absolutize()?.to_str().map(|x| x.to_string()));
+                if library.natives.is_none() {
+                    let p = path.absolutize()?;
+                    Ok(p.to_str().map(|x| x.to_string()))
                 } else {
                     Ok(None)
-                };
+                }
             })
         }))
         .buffer_unordered(launching_parameter.concurrent_downloads as usize)

@@ -1,22 +1,3 @@
-/*
- * This file is part of LiquidLauncher (https://github.com/CCBlueX/LiquidLauncher)
- *
- * Copyright (c) 2015 - 2024 CCBlueX
- *
- * LiquidLauncher is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * LiquidLauncher is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with LiquidLauncher. If not, see <https://www.gnu.org/licenses/>.
- */
-
 use std::sync::{Arc, Mutex};
 
 use commands::*;
@@ -45,7 +26,6 @@ mod commands;
 /// Runs the GUI and returns when the window is closed.
 pub fn gui_main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -61,21 +41,88 @@ pub fn gui_main() {
             request_builds,
             request_mods,
             run_client,
-            login_offline,
             login_microsoft,
-            client_account_authenticate,
-            client_account_update,
             logout,
             refresh,
             fetch_blog_posts,
             fetch_changelog,
             clear_data,
+            clear_all_data,
             default_data_folder_path,
             terminate,
             get_launcher_version,
             get_custom_mods,
             install_custom_mod,
-            delete_custom_mod
+            delete_custom_mod,
+            github_auth_url,
+            github_exchange_code,
+            github_fetch_user,
+            github_dispatch,
+            modrinth_search,
+            modrinth_get_project,
+            modrinth_get_versions,
+            modrinth_get_filtered_versions,
+            modrinth_install,
+            modrinth_resolve_dependencies,
+            modrinth_resolve_download_list,
+            server_list,
+            server_create,
+            server_delete,
+            server_update,
+            server_start,
+            server_stop,
+            server_status,
+            server_logs,
+            server_send_command,
+            server_share_info,
+            server_is_any_running,
+            server_player_history,
+            server_metrics,
+            server_backup_create,
+            server_backup_list,
+            server_backup_restore,
+            server_backup_delete,
+            server_backup_info,
+            server_worlds_list,
+            server_world_delete,
+            server_world_backup,
+            server_world_backups_list,
+            server_world_backup_restore,
+            server_world_backup_delete,
+            server_files_list,
+            server_files_read,
+            server_files_write,
+            server_files_delete,
+            server_files_rename,
+            server_files_mkdir,
+            tunnel_start,
+            tunnel_stop,
+            tunnel_status,
+            server_mods_search,
+            server_mods_get_project,
+            server_mods_get_versions,
+            server_mods_install,
+            server_mods_list,
+            server_mods_delete,
+            rcon_connect,
+            rcon_disconnect,
+            rcon_send_command,
+            rcon_player_list,
+            rcon_player_info,
+            rcon_kick,
+            rcon_ban,
+            rcon_pardon,
+            rcon_op,
+            rcon_deop,
+            rcon_status,
+            social_register_user,
+            social_get_user_profile,
+            social_update_profile,
+            social_create_post,
+            social_get_feed,
+            social_like_post,
+            social_get_hashtags,
+            client_account_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

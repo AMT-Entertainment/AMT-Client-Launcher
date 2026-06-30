@@ -132,7 +132,13 @@ pub(crate) async fn get_custom_mods(
             .file_type()
             .await
             .map_err(|e| format!("unable to read custom mods: {:?}", e))?;
-        let file_name = entry.file_name().to_str().unwrap().to_string();
+        let file_name = match entry.file_name().to_str() {
+            Some(f) => f.to_string(),
+            None => {
+                warn!("Skipping non-UTF-8 filename in mod cache");
+                continue;
+            }
+        };
 
         if file_type.is_file() && file_name.ends_with(".jar") {
             // todo: pull name from JAR manifest
@@ -162,11 +168,16 @@ pub(crate) async fn install_custom_mod(
         .join(format!("{}-{}", branch, mc_version));
 
     if !mod_cache_path.exists() {
-        fs::create_dir_all(&mod_cache_path).await.unwrap();
+        fs::create_dir_all(&mod_cache_path)
+            .await
+            .map_err(|e| format!("unable to create mod cache directory: {:?}", e))?;
     }
 
     if let Some(file_name) = path.file_name() {
-        let dest_path = mod_cache_path.join(file_name.to_str().unwrap());
+        let file_name = file_name
+            .to_str()
+            .ok_or_else(|| "invalid filename: non-UTF-8".to_string())?;
+        let dest_path = mod_cache_path.join(file_name);
 
         fs::copy(path, dest_path)
             .await
@@ -260,7 +271,7 @@ fn handle_log(window: &ShareableWindow, msg: &str) -> anyhow::Result<()> {
 pub(crate) async fn run_client(
     client: Client,
     build_id: u32,
-    options: Options,
+    mut options: Options,
     mods: Vec<LoaderMod>,
     window: Window,
     app_state: tauri::State<'_, AppState>,
@@ -268,10 +279,16 @@ pub(crate) async fn run_client(
     // A shared mutex for the window object.
     let shareable_window: ShareableWindow = Arc::new(Mutex::new(window));
 
-    let minecraft_account = options
-        .start_options
-        .minecraft_account
-        .ok_or("no account selected")?;
+    let minecraft_account = if let Some(acc) = options.start_options.minecraft_account {
+        acc
+    } else {
+        let idx = options.start_options.active_account_index;
+        if idx < options.start_options.accounts.len() {
+            options.start_options.accounts.swap_remove(idx)
+        } else {
+            return Err("no account selected".to_string());
+        }
+    };
     let (account_name, uuid, token, user_type) = match minecraft_account {
         MinecraftAccount::MsaAccount {
             msa: _,
@@ -288,16 +305,8 @@ pub(crate) async fn run_client(
         MinecraftAccount::LegacyMsaAccount {
             name, uuid, token, ..
         } => (name, uuid.to_string(), token, "msa".to_string()),
-        MinecraftAccount::OfflineAccount { name, id, .. } => {
-            (name, id.to_string(), "-".to_string(), "legacy".to_string())
-        }
-    };
 
-    let client_account = options.premium_options.account;
-    let skip_advertisement = options.premium_options.skip_advertisement
-        && client_account
-        .as_ref()
-        .is_some_and(|x| x.get_user_information().is_some_and(|u| u.premium));
+    };
 
     // Random XUID
     let xuid = Uuid::new_v4().to_string();
@@ -330,9 +339,14 @@ pub(crate) async fn run_client(
 
     let copy_of_runner_instance = runner_instance.clone();
 
+    let mut jvm_args = options.start_options.jvm_args.unwrap_or_else(|| vec![]);
+    jvm_args.push(format!("-Dcom.amt.client.badge={}", options.amt_options.badge));
+    jvm_args.push(format!("-Dcom.amt.client.cape={}", options.amt_options.equipped_cape.unwrap_or_default()));
+    jvm_args.push(format!("-Dcom.amt.client.uuid={}", uuid));
+
     let parameters = StartParameter {
         java_distribution: options.start_options.java_distribution,
-        jvm_args: options.start_options.jvm_args.unwrap_or_else(|| vec![]),
+        jvm_args,
         memory: options.start_options.memory,
         custom_data_path: if !options.start_options.custom_data_path.is_empty() {
             Some(options.start_options.custom_data_path)
@@ -348,54 +362,67 @@ pub(crate) async fn run_client(
         keep_launcher_open: options.launcher_options.keep_launcher_open,
         concurrent_downloads: options.launcher_options.concurrent_downloads,
         client,
-        client_account,
-        skip_advertisement,
+        skip_advertisement: options.premium_options.skip_advertisement,
+        vanilla_mode: options.launcher_options.vanilla_mode,
     };
 
     thread::spawn(move || {
-        tokio::runtime::Builder::new_current_thread()
+        let runtime = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .unwrap()
-            .block_on(async {
-                let keep_launcher_open = parameters.keep_launcher_open;
+        {
+            Ok(r) => r,
+            Err(e) => {
+                error!("Failed to create tokio runtime: {e}");
+                if let Ok(mut locked) = copy_of_runner_instance.lock() {
+                    *locked = None;
+                }
+                if let Ok(locked) = shareable_window.lock() {
+                    let _ = locked.emit("client-error", ());
+                }
+                return;
+            }
+        };
 
-                let launcher_data = LauncherData {
-                    on_stdout: handle_stdout,
-                    on_stderr: handle_stderr,
-                    on_progress: handle_progress,
-                    on_log: handle_log,
-                    hide_window: |w| w.lock().unwrap().hide().unwrap(),
-                    data: Box::new(shareable_window.clone()),
-                    terminator: terminator_rx,
-                };
-
-                if let Err(e) =
-                    prelauncher::launch(launch_manifest, parameters, mods, launcher_data).await
-                {
-                    if !keep_launcher_open {
-                        shareable_window.lock().unwrap().show().unwrap();
+        runtime.block_on(async {
+            let launcher_data = LauncherData {
+                on_stdout: handle_stdout,
+                on_stderr: handle_stderr,
+                on_progress: handle_progress,
+                on_log: handle_log,
+                hide_window: |w| {
+                    if let Ok(locked) = w.lock() {
+                        let _ = locked.hide();
                     }
+                },
+                data: Box::new(shareable_window.clone()),
+                terminator: terminator_rx,
+            };
 
-                    let message = format!("An error occured:\n\n{:?}", e);
-                    shareable_window
-                        .lock()
-                        .unwrap()
-                        .emit("client-error", ())
-                        .unwrap();
-                    handle_stderr(&shareable_window, message.as_bytes()).unwrap();
-                };
+            let launch_result =
+                prelauncher::launch(launch_manifest, parameters, mods, launcher_data).await;
 
-                *copy_of_runner_instance
-                    .lock()
-                    .map_err(|e| format!("unable to lock runner instance: {:?}", e))
-                    .unwrap() = None;
-                shareable_window
-                    .lock()
-                    .unwrap()
-                    .emit("client-exited", ())
-                    .unwrap()
-            });
+            if let Err(e) = launch_result {
+                if let Ok(locked) = shareable_window.lock() {
+                    let _ = locked.show();
+                }
+
+                let message = format!("An error occured:\n\n{:?}", e);
+                if let Ok(locked) = shareable_window.lock() {
+                    let _ = locked.emit("client-error", ());
+                }
+                let _ = handle_stderr(&shareable_window, message.as_bytes());
+            };
+
+            // Show launcher window again after game exits
+            if let Ok(locked) = shareable_window.lock() {
+                let _ = locked.show();
+                let _ = locked.emit("client-exited", ());
+            }
+            if let Ok(mut locked) = copy_of_runner_instance.lock() {
+                *locked = None;
+            }
+        });
     });
 
     Ok(())
@@ -410,7 +437,7 @@ pub(crate) async fn terminate(app_state: tauri::State<'_, AppState>) -> Result<(
 
     if let Some(inst) = lck.take() {
         info!("Sending sigterm");
-        inst.terminator.send(()).unwrap();
+        let _ = inst.terminator.send(());
     }
     Ok(())
 }

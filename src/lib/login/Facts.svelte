@@ -1,44 +1,44 @@
 <script>
     import {fly} from "svelte/transition";
+    import { onDestroy } from "svelte";
 
     const facts = [
         {
-            title: "Blatant or Closet Cheating - You Decide!",
-            description: "LiquidBounce comes with many built-in blatant and closet cheats, making it the perfect all-in-one client.",
+            title: "All-in-One Platform",
+            description: "Browse, install, and manage mods, shaders, and resource packs from Modrinth—all from one place.",
         },
         {
-            title: "Multi-Version Support",
-            description: "With the integrated version changer, you can easily switch between different Minecraft versions without restarting the game!",
+            title: "Built-in Server Hosting",
+            description: "Create Fabric, Paper, or Forge servers with a single click. Full GUI control—no terminal needed.",
         },
         {
-            title: "Multi-Server Support",
-            description: "LiquidBounce provides features and bypasses for many different servers."
+            title: "Zero Port Forwarding",
+            description: "Share your server with friends instantly. No router config, no port forwarding—just play.",
         },
         {
-            title: "Auto Config System",
-            description: "LiquidBounce's Auto Config System will automatically apply the best settings for you when joining a well-known server.",
+            title: "Cape & Badge Cosmetics",
+            description: "Design your own cape with the pixel-art editor and equip unique badges to stand out in-game.",
         },
         {
-            title: "Customizable",
-            description: "LiquidBounce's UI is fully customizable. You can change out the entire UI to your liking.",
-        },
-        {
-            title: "6.000.000 Total Downloads",
-            description:
-                "LiquidBounce is one of the most popular hacked clients of all time.",
+            title: "Social Hub",
+            description: "Share servers, cosmetics, and posts. DM friends and discover new communities—all inside the launcher.",
         },
         {
             title: "Free & Open Source",
-            description: "LiquidBounce's source code is publicly available.",
+            description: "AMT Client is completely free and open source under GPL-3.0.",
         },
         {
-            title: "ScriptAPI",
-            description:
-                "LiquidBounce's Script API allows users to write their own modules and commands.",
+            title: "Smart Mod Packs",
+            description: "When joining a friend's server, the correct mods and version install automatically—zero config.",
+        },
+        {
+            title: "Built with Tauri",
+            description: "Lightning-fast native performance with a modern Svelte UI. No Electron bloat.",
         },
     ];
 
     let currentFact = 0;
+    let autoAdvance;
 
     function handlePrevClick(e) {
         if (currentFact <= 0) {
@@ -56,9 +56,13 @@
         }
     }
 
-    setInterval(() => {
+    autoAdvance = setInterval(() => {
         handleNextClick();
     }, 5000);
+
+    onDestroy(() => {
+        clearInterval(autoAdvance);
+    });
 </script>
 
 <div class="wrapper">
@@ -89,28 +93,26 @@
 <style>
     .wrapper {
         position: relative;
+        padding: 20px;
     }
 
     .fact {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 400px;
+        width: 100%;
         display: flex;
         flex-direction: column;
-        row-gap: 10px;
+        gap: 12px;
     }
 
     .title {
-        font-size: 40px;
+        font-size: 24px;
         color: white;
-        font-weight: 600;
+        font-weight: 700;
     }
 
     .description {
-        font-size: 18px;
-        color: rgba(255, 255, 255, 0.5);
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.55);
+        line-height: 1.5;
     }
 
     .buttons-wrapper {

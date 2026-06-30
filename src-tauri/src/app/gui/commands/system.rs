@@ -26,8 +26,11 @@ pub(crate) async fn get_launcher_version() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub(crate) async fn setup_client(session_token: String) -> Result<Client, String> {
-    Client::lookup(session_token)
+pub(crate) async fn setup_client(
+    session_token: String,
+    backend_url: Option<String>,
+) -> Result<Client, String> {
+    Client::lookup(session_token, backend_url)
         .await
 }
 

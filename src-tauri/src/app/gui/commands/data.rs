@@ -68,6 +68,29 @@ pub(crate) async fn clear_data(options: Options) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub(crate) async fn clear_all_data() -> Result<Options, String> {
+    let config_dir = LAUNCHER_DIRECTORY.config_dir();
+    let data_dir = LAUNCHER_DIRECTORY.data_dir();
+
+    // Remove all cached data directories
+    for dir in ["assets", "gameDir", "libraries", "mod_cache", "natives", "runtimes", "versions"] {
+        let path = data_dir.join(dir);
+        if path.exists() {
+            std::fs::remove_dir_all(&path).map_err(|e| format!("failed to remove {}: {:?}", dir, e))?;
+        }
+    }
+
+    // Remove options.json to force fresh setup
+    let options_path = config_dir.join("options.json");
+    if options_path.exists() {
+        std::fs::remove_file(&options_path).map_err(|e| format!("failed to remove options: {:?}", e))?;
+    }
+
+    // Return fresh default options
+    Ok(Options::default())
+}
+
+#[tauri::command]
 pub(crate) async fn default_data_folder_path() -> Result<String, String> {
     let data_directory = LAUNCHER_DIRECTORY.data_dir().to_str();
 

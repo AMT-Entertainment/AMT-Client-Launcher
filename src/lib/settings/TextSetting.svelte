@@ -1,12 +1,20 @@
 <script>
+    import { createEventDispatcher } from "svelte";
+
     export let title;
     export let placeholder;
     export let value;
+
+    const dispatch = createEventDispatcher();
+
+    function handleChange() {
+        dispatch("change", value);
+    }
 </script>
 
 <div class="text-setting">
     <div class="title">{title}</div>
-    <input class="input" type="text" {placeholder} bind:value={value} />
+    <input class="input" type="text" {placeholder} bind:value={value} on:change={handleChange} />
 </div>
 
 <style>

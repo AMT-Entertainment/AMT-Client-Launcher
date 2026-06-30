@@ -5,12 +5,23 @@
     import ButtonClose from "../common/ButtonClose.svelte";
     import { openUrl } from "@tauri-apps/plugin-opener";
     import ButtonCopyClipboard from "../common/ButtonCopyClipboard.svelte";
+    import { t } from "../i18n/index.js";
     import ButtonSetting from "../settings/ButtonSetting.svelte";
     
     export let error = {
         message: "Unknown error",
         error: null
     };
+
+    let userMessage = "";
+
+    async function reportIssue() {
+        const subject = encodeURIComponent("AMT Client Error Report");
+        const body = encodeURIComponent(
+            `Error: ${error.message}\n\nDetails:\n${error.error || "N/A"}\n\nYour message:\n${userMessage || "(none)"}`
+        );
+        await openUrl(`mailto:amt.entertainment@outlook.de?subject=${subject}&body=${body}`);
+    }
 </script>
 
 <VerticalFlexWrapper blur={false}>
@@ -20,13 +31,13 @@
     </TitleBar>
 
     <div class="error-container">
-        <h1>Error Occurred</h1>
+        <h1>{$t("error.title")}</h1>
         <p class="error-message">{error.message}</p>
         
         {#if error.error}
             <div class="error-details">
                 <div class="error-header">
-                    <h3>Technical Details:</h3>
+                    <h3>{$t("error.details")}</h3>
                     <div class="copy-button">
                         <ButtonCopyClipboard textToCopy={JSON.stringify(error)} iconOnly={true} />
                     </div>
@@ -35,9 +46,13 @@
             </div>
         {/if}
 
+        <div class="user-message-area">
+            <label for="error-report-message">Add a message (optional):</label>
+            <textarea id="error-report-message" bind:value={userMessage} placeholder="Describe what you were doing when the error occurred..." rows="3"></textarea>
+        </div>
+
         <div class="help-buttons">
-            <ButtonSetting text="Quick Help" color="#4677ff" on:click={() => openUrl('https://liquidbounce.net/docs/Tutorials/Fixing%20LiquidLauncher')}></ButtonSetting>
-            <ButtonSetting text="Contact Support" color="#45a049" on:click={() => openUrl('https://ccbluex.net/contact')}></ButtonSetting>
+            <ButtonSetting text={$t("error.report")} color="#4677ff" on:click={reportIssue}></ButtonSetting>
         </div>
     </div>
 </VerticalFlexWrapper>
@@ -95,6 +110,36 @@
     .error-details pre {
         white-space: pre-wrap;
         word-break: break-all;
+    }
+
+    .user-message-area {
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+
+    .user-message-area label {
+        display: block;
+        margin-bottom: 0.4rem;
+        font-size: 0.9rem;
+        color: #ccc;
+    }
+
+    .user-message-area textarea {
+        width: 100%;
+        padding: 0.6rem;
+        border-radius: 6px;
+        border: 1px solid rgba(255,255,255,0.2);
+        background: rgba(0,0,0,0.3);
+        color: white;
+        font-family: inherit;
+        font-size: 0.9rem;
+        resize: vertical;
+        box-sizing: border-box;
+    }
+
+    .user-message-area textarea:focus {
+        outline: none;
+        border-color: #4677ff;
     }
 
     .help-buttons {

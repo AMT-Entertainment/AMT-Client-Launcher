@@ -1,21 +1,28 @@
 <script>
     import { fly } from "svelte/transition";
-    import { afterUpdate } from "svelte";
+    import { onMount, onDestroy } from "svelte";
 
     export let text;
 
     let element;
     let shown = false;
+    let parentEl;
 
-    afterUpdate(() => {
-        element.parentNode.addEventListener("mouseenter", (e) => {
-            shown = true;
-        });
-
-        element.parentNode.addEventListener("mouseleave", (e) => {
-            shown = false;
-        });
+    onMount(() => {
+        parentEl = element.parentNode;
+        parentEl.addEventListener("mouseenter", onEnter);
+        parentEl.addEventListener("mouseleave", onLeave);
     });
+
+    onDestroy(() => {
+        if (parentEl) {
+            parentEl.removeEventListener("mouseenter", onEnter);
+            parentEl.removeEventListener("mouseleave", onLeave);
+        }
+    });
+
+    function onEnter() { shown = true; }
+    function onLeave() { shown = false; }
 </script>
 
 <div bind:this={element}>

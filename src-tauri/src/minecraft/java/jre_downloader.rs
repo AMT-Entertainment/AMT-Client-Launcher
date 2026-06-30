@@ -61,7 +61,7 @@ pub async fn find_java_binary(
 
                 let metadata = fs::metadata(&java_binary).await?;
 
-                if !metadata.permissions().mode() & 0o111 != 0 {
+                if metadata.permissions().mode() & 0o111 == 0 {
                     // try to change permissions
                     let mut permissions = metadata.permissions();
                     permissions.set_mode(0o111);

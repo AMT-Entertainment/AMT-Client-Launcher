@@ -4,15 +4,13 @@ use anyhow::{bail, Context, Result};
 use tokio::fs;
 
 const HOSTS_PATH: &str = "Windows\\System32\\drivers\\etc\\hosts";
-const HOSTS: [&str; 4] = [
+const HOSTS: [&str; 2] = [
     "mojang.com",
     "minecraft.net",
-    "liquidbounce.net",
-    "ccbluex.net",
 ];
 
 /// We have noticed many user have modified the hosts file to block the Minecraft authentication server.
-/// This is likely by using a third-party program. Because LiquidLauncher requires access to the authentication server, we have to modify the hosts file to allow access.
+/// This is likely by using a third-party program. Because AMT Client requires access to the authentication server, we have to modify the hosts file to allow access.
 /// we need to check the hosts file and alert the user if it has been modified.
 pub async fn check_hosts_file() -> Result<()> {
     // Get location of Windows hosts file dynamically

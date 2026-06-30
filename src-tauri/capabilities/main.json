@@ -20,7 +20,6 @@
         "dialog:allow-ask",
         "clipboard-manager:allow-write-text",
         "opener:default",
-        "process:allow-exit",
-        "updater:default"
+        "process:allow-exit"
     ]
 }

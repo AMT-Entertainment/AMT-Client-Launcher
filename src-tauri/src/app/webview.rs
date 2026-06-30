@@ -32,7 +32,7 @@ use std::{
 };
 use tauri::{Listener, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tokio::time::sleep;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use super::gui::ShareableWindow;
 
@@ -53,9 +53,8 @@ pub async fn open_download_page(
         if count > MAX_DOWNLOAD_ATTEMPTS {
             bail!("Failed to open download page after {} attempts.\n\n\
             Please do not close the download window. Instead proceed with the download by pressing on 'Continue' and then 'Download'.\n\n\
-            If the download window does not appear, please try restarting LiquidLauncher with administrator privileges.\n\
-            If this does not help, please install LiquidBounce manually (https://liquidbounce.net/docs/get-started/manual-installation).\n\
-            Or try our advice at https://liquidbounce.net/docs/tutorials/fixing-liquidlauncher.", MAX_DOWNLOAD_ATTEMPTS);
+            If the download window does not appear, please try restarting AMT Client with administrator privileges.\n\
+            Or try our advice at https://amt-client-docs.example.com.", MAX_DOWNLOAD_ATTEMPTS);
         }
 
         launcher_data.progress_update(ProgressUpdate::SetLabel(format!(
@@ -85,7 +84,7 @@ async fn show_webview(url: Url, window: &Arc<Mutex<tauri::Window>>) -> Result<St
     let len = app.webview_windows().len();
 
     let download_view = WebviewWindowBuilder::new(app, format!("download_view-{}", len), WebviewUrl::External(url))
-        .title("Download of LiquidBounce JAR")
+        .title("Mod Download")
         .visible(true)
         .always_on_top(true)
         .maximized(true)
@@ -116,10 +115,18 @@ async fn show_webview(url: Url, window: &Arc<Mutex<tauri::Window>>) -> Result<St
             pid: String
         }
 
-        let payload = serde_json::from_str::<DownloadPayload>(payload).unwrap();
+        let payload = match serde_json::from_str::<DownloadPayload>(payload) {
+            Ok(p) => p,
+            Err(e) => {
+                error!("Failed to parse download payload: {e}");
+                return;
+            }
+        };
 
         info!("Received PID: {}", payload.pid);
-        *cloned_cell.lock().unwrap() = Some(payload.pid);
+        if let Ok(mut locked) = cloned_cell.lock() {
+            *locked = Some(payload.pid);
+        }
     });
 
     let pid = loop {

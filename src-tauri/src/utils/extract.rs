@@ -54,7 +54,9 @@ where
         } else {
             // Creates parent directories. They may not exist if iteration is out of order
             // or the archive does not contain directory entries.
-            let parent = path.parent().unwrap();
+            let parent = path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("Extract path has no parent: {}", path.display()))?;
             if !parent.is_dir() {
                 create_dir_all(parent).await?;
             }

@@ -627,8 +627,13 @@ impl From<&LibraryArtifact> for LibraryDownloadInfo {
 
 impl LibraryDownloadInfo {
     async fn fetch_sha1(&self) -> Result<String> {
+        let sha1_url = if let Some(query_start) = self.url.find('?') {
+            format!("{}.sha1{}", &self.url[..query_start], &self.url[query_start..])
+        } else {
+            format!("{}.sha1", &self.url)
+        };
         HTTP_CLIENT
-            .get(&format!("{}{}", &self.url, ".sha1"))
+            .get(&sha1_url)
             .send()
             .await?
             .error_for_status()?

@@ -9,7 +9,7 @@
 </script>
 
 <label class="toggle-setting">
-    <input class="checkbox" type="checkbox" bind:checked={value} disabled={disabled} on:change={e => dispatch("change", e)} />
+    <input class="checkbox" type="checkbox" bind:checked={value} disabled={disabled} on:change={() => dispatch("change", { value })} />
     <span class="slider" />
 
     <div class="title">{title}</div>

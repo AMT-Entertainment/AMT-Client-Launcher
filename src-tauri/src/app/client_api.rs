@@ -19,7 +19,6 @@
 
 use std::collections::BTreeMap;
 
-use crate::auth::ClientAccount;
 use crate::minecraft::java::JavaDistribution;
 use crate::utils::get_maven_artifact_path;
 use crate::HTTP_CLIENT;
@@ -29,16 +28,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, error, info, warn};
 
-/// API endpoint url
-pub const LAUNCHER_API: [&str; 3] = [
-    "https://api.liquidbounce.net",
-    "https://api.ccbluex.net",
-
-    // Non-secure connection requires additional confirmation from the user,
-    // as they are vulnerable to MITM attacks and data leaks.
-    // A VPN or a proxy can be used to secure the connection.
-    "http://nossl.api.liquidbounce.net",
-];
+/// Default API endpoint url (used as fallback if no custom URL is configured)
+pub const DEFAULT_API_URL: &str = "https://amt-entertainment.github.io/AMT-Client-Backend";
 
 pub const API_V1: &str = "api/v1";
 pub const API_V3: &str = "api/v3";
@@ -64,39 +55,48 @@ impl Client {
     /// Finds the first available API endpoint
     /// and returns a [Client] instance with the endpoint set.
     ///
+    /// If `custom_url` is provided, it is tried first. Falls back to [DEFAULT_API_URL].
+    ///
     /// Returns [String] as error with technical information if no API endpoint is reachable.
-    pub async fn lookup(session_token: String) -> Result<Self, String> {
+    pub async fn lookup(session_token: String, custom_url: Option<String>) -> Result<Self, String> {
         let span = debug_span!("api_lookup");
         let _guard = span.enter();
 
-        // LiquidLauncher will show a technical information section in the error dialog,
+        let mut urls: Vec<String> = Vec::new();
+
+        // Custom URL first if provided
+        if let Some(url) = custom_url {
+            if !url.is_empty() {
+                urls.push(url);
+            }
+        }
+
+        // Fallback to default
+        urls.push(DEFAULT_API_URL.to_string());
+
+        // AMT Client will show a technical information section in the error dialog,
         // when the API endpoint is not reachable.
         // This is to help the user to understand the issue.
         let mut technical_information = String::new();
 
         info!(parent: &span, "Looking up available API endpoints");
-        for endpoint in LAUNCHER_API.iter() {
+        for endpoint in &urls {
             if !technical_information.is_empty() {
-                // Add a separator between each API endpoint
                 technical_information.push('\n');
             }
 
-            // Check if the endpoint is using SSL
             let is_secure = endpoint.starts_with("https://");
             if !is_secure {
                 warn!(parent: &span, "Falling back to Non-SSL '{}' endpoint.", endpoint);
             }
 
-            // Check if the endpoint is reachable,
-            // this is as soon we get a SUCCESS response from the endpoint
-            // e.g. 200 OK: LiquidBounce API written in Rust using Tokio Axum - @CCBlueX (Izuna).
+            // Probe a known endpoint to verify the API is functional
+            let probe_url = format!("{}/api/v1/version/branches.json", endpoint);
             let is_success = HTTP_CLIENT
-                .get(*endpoint)
+                .get(&probe_url)
                 .send()
                 .await
                 .map_err(|err| {
-                    // Cast error into anyhow::Error - because it has a better representation
-                    // of the error
                     let err = Into::<Error>::into(err);
                     technical_information.push_str(&format!(
                         "Failed to connect to API endpoint '{}': {:?}\n",
@@ -123,7 +123,6 @@ impl Client {
                             endpoint, status
                         );
                     }
-
                     is_success
                 });
 
@@ -133,9 +132,6 @@ impl Client {
             }
         }
 
-        // If no API endpoint is reachable, we bail with the technical information
-        // as the error message, because we already have 'Unable to connect to LiquidBounce API'
-        // as header.
         Err(technical_information)
     }
 
@@ -190,31 +186,16 @@ impl Client {
             .await
     }
 
-    /// Resolve direct download link from skip file pid
-    pub async fn fetch_user(&self, client_account: &ClientAccount) -> Result<UserInformation> {
-        self.request_with_client_account("oauth/user", client_account)
-            .await
-    }
-
-    /// Resolve direct download link from skip file pid
-    pub async fn resolve_skip_file(
-        &self,
-        client_account: &ClientAccount,
-        pid: &str,
-    ) -> Result<SkipFileResolve> {
-        self.request_with_client_account(&format!("file/resolve/{}", pid), client_account)
-            .await
-    }
-
-    /// Uses [self.url] to create a direct download link for a file with the given pid.
-    pub fn get_direct_download_link(&self, pid: &str) -> String {
-        format!("{}/{}/file/{}", self.url, API_V3, pid)
-    }
-
     /// Request JSON formatted data from launcher API
+    /// Appends `.json` suffix since the backend is served as static files.
     pub async fn request_from_endpoint<T: DeserializeOwned>(&self, api_version: &str, endpoint: &str) -> Result<T> {
+        let path = if endpoint.ends_with(".json") {
+            endpoint.to_string()
+        } else {
+            format!("{}.json", endpoint)
+        };
         Ok(HTTP_CLIENT
-            .get(format!("{}/{}/{}", self.url, api_version, endpoint))
+            .get(format!("{}/{}/{}", self.url, api_version, path))
             .header("X-Session-Token", &self.session_token)
             .send()
             .await?
@@ -223,20 +204,6 @@ impl Client {
             .await?)
     }
 
-    pub async fn request_with_client_account<T: DeserializeOwned>(
-        &self,
-        endpoint: &str,
-        client_account: &ClientAccount,
-    ) -> Result<T> {
-        Ok(client_account
-            .authenticate_request(HTTP_CLIENT.get(format!("{}/{}/{}", self.url, API_V3, endpoint)))?
-            .header("X-Session-Token", &self.session_token)
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<T>()
-            .await?)
-    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -254,17 +221,17 @@ pub struct Pagination {
 
 #[derive(Serialize, Deserialize)]
 pub struct BlogPost {
-    #[serde(rename(serialize = "postId"))]
+    #[serde(rename = "postId")]
     pub post_id: u32,
-    #[serde(rename(serialize = "postUid"))]
+    #[serde(rename = "postUid")]
     pub post_uid: String,
     pub author: String,
     pub title: String,
     pub description: String,
     pub date: NaiveDateTime,
-    #[serde(rename(serialize = "bannerText"))]
+    #[serde(rename = "bannerText")]
     pub banner_text: String,
-    #[serde(rename(serialize = "bannerImageUrl"))]
+    #[serde(rename = "bannerImageUrl")]
     pub banner_image_url: String,
 }
 
@@ -286,23 +253,23 @@ pub struct Changelog {
 ///
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Build {
-    #[serde(rename(serialize = "buildId"))]
+    #[serde(rename = "buildId")]
     pub build_id: u32,
-    #[serde(rename(serialize = "commitId"))]
+    #[serde(rename = "commitId")]
     pub commit_id: String,
     pub branch: String,
     pub subsystem: String,
-    #[serde(rename(serialize = "lbVersion"))]
+    #[serde(rename = "lbVersion")]
     pub lb_version: String,
-    #[serde(rename(serialize = "mcVersion"))]
+    #[serde(rename = "mcVersion")]
     pub mc_version: String,
     pub release: bool,
     pub date: DateTime<Utc>,
     pub message: String,
     pub url: String,
-    #[serde(rename(serialize = "jreDistribution"), default)]
+    #[serde(rename = "jreDistribution", default)]
     pub jre_distribution: JavaDistribution,
-    #[serde(rename(serialize = "jreVersion"))]
+    #[serde(rename = "jreVersion")]
     pub jre_version: u32,
     #[serde(flatten)]
     pub subsystem_specific_data: SubsystemSpecificData,
@@ -316,13 +283,13 @@ pub struct Build {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SubsystemSpecificData {
     // Additional data
-    #[serde(rename(serialize = "fabricApiVersion"))]
+    #[serde(rename = "fabricApiVersion")]
     pub fabric_api_version: String,
-    #[serde(rename(serialize = "fabricLoaderVersion"))]
+    #[serde(rename = "fabricLoaderVersion")]
     pub fabric_loader_version: String,
-    #[serde(rename(serialize = "kotlinVersion"))]
+    #[serde(rename = "kotlinVersion")]
     pub kotlin_version: String,
-    #[serde(rename(serialize = "kotlinModVersion"))]
+    #[serde(rename = "kotlinModVersion")]
     pub kotlin_mod_version: String,
 }
 
@@ -395,29 +362,16 @@ impl ModSource {
 #[derive(Deserialize)]
 #[serde(tag = "name")]
 pub enum LoaderSubsystem {
-    #[serde(rename = "fabric")]
+    #[serde(rename = "fabric", rename_all = "camelCase")]
     Fabric {
         manifest: String,
         mod_directory: String,
     },
-    #[serde(rename = "forge")]
+    #[serde(rename = "forge", rename_all = "camelCase")]
     Forge {
         manifest: String,
         mod_directory: String,
     },
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct SkipFileResolve {
-    pub error: bool,
-    pub msg: String,
-    pub target_pid: Option<String>
-}
 
-#[derive(Deserialize, Serialize, Clone)]
-pub struct UserInformation {
-    pub nickname: String,
-    #[serde(rename = "userId", alias = "user_id")]
-    pub user_id: String,
-    pub premium: bool,
-}

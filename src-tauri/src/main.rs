@@ -1,22 +1,3 @@
-/*
- * This file is part of LiquidLauncher (https://github.com/CCBlueX/LiquidLauncher)
- *
- * Copyright (c) 2015 - 2024 CCBlueX
- *
- * LiquidLauncher is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * LiquidLauncher is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with LiquidLauncher. If not, see <https://www.gnu.org/licenses/>.
- */
-#![feature(duration_constructors)]
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
@@ -27,14 +8,13 @@ use crate::utils::{OS, OS_VERSION};
 use anyhow::Result;
 use directories::ProjectDirs;
 use once_cell::sync::Lazy;
-use reqwest::Client;
 use std::io;
+use std::path::PathBuf;
 use tracing::{debug, debug_span, error, info};
 use tracing_subscriber::layer::SubscriberExt;
 use utils::ARCHITECTURE;
 
 pub mod app;
-pub mod auth;
 pub mod minecraft;
 
 mod error;
@@ -43,7 +23,7 @@ mod utils;
 const LAUNCHER_VERSION: &str = env!("CARGO_PKG_VERSION");
 static LAUNCHER_DIRECTORY: Lazy<ProjectDirs> =
     Lazy::new(
-        || match ProjectDirs::from("net", "CCBlueX", "LiquidLauncher") {
+        || match ProjectDirs::from("com", "AMT", "AMT Client") {
             Some(proj_dirs) => proj_dirs,
             None => panic!("no application directory"),
         },
@@ -51,12 +31,22 @@ static LAUNCHER_DIRECTORY: Lazy<ProjectDirs> =
 
 static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
-/// HTTP Client with launcher agent
-static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
-    let client = reqwest::ClientBuilder::new()
+/// Directory where server instances are stored
+static SERVERS_DIR: Lazy<PathBuf> = Lazy::new(|| {
+    if let Ok(dir) = std::env::var("AMT_SERVERS_DIR") {
+        let path = PathBuf::from(dir);
+        let _ = std::fs::create_dir_all(&path);
+        return path;
+    }
+    LAUNCHER_DIRECTORY.data_dir().join("servers")
+});
+
+/// HTTP Client with launcher agent - uses oauth2's reqwest to maintain type compatibility
+static HTTP_CLIENT: Lazy<oauth2::reqwest::Client> = Lazy::new(|| {
+    let client = oauth2::reqwest::ClientBuilder::new()
         .user_agent(APP_USER_AGENT)
         .build()
-        .unwrap_or_else(|_| Client::new());
+        .unwrap_or_else(|_| oauth2::reqwest::Client::new());
 
     client
 });
@@ -72,7 +62,7 @@ pub fn main() -> Result<()> {
     let file_appender = tracing_appender::rolling::daily(logs, "launcher.log");
 
     let subscriber = tracing_subscriber::registry()
-        .with(EnvFilter::from("liquidlauncher=debug"))
+        .with(EnvFilter::from("amt_client=debug"))
         .with(
             fmt::Layer::new()
                 .with_ansi(true)
@@ -89,10 +79,9 @@ pub fn main() -> Result<()> {
         let span = debug_span!("startup");
         let _guard = span.enter();
 
-        info!(parent: &span, "Starting LiquidLauncher v{}", LAUNCHER_VERSION);
+        info!(parent: &span, "Starting AMT Client v{}", LAUNCHER_VERSION);
         info!(parent: &span, "OS: {:} {:} {:}", OS, *ARCHITECTURE, OS_VERSION.to_string());
 
-        // application directory
         info!(parent: &span, "Creating application directory");
         debug!(parent: &span, "Application directory: {:?}", LAUNCHER_DIRECTORY.data_dir());
         debug!(parent: &span, "Config directory: {:?}", LAUNCHER_DIRECTORY.config_dir());
@@ -102,7 +91,6 @@ pub fn main() -> Result<()> {
         info!(parent: &span, "Starting GUI using Tauri framework {}", tauri::VERSION);
     }
 
-    // Start the GUI
     gui_main();
 
     info!("Launcher exited");

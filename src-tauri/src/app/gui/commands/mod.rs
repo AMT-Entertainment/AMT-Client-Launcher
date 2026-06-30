@@ -1,28 +1,29 @@
-/*
- * This file is part of LiquidLauncher (https://github.com/CCBlueX/LiquidLauncher)
- *
- * Copyright (c) 2015 - 2024 CCBlueX
- *
- * LiquidLauncher is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * LiquidLauncher is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with LiquidLauncher. If not, see <https://www.gnu.org/licenses/>.
- */
-
 pub(crate) mod auth;
 pub(crate) mod client;
 pub(crate) mod data;
 pub(crate) mod system;
+pub(crate) mod github;
+pub(crate) mod modrinth_cmd;
+pub(crate) mod server_cmd;
 
 pub(crate) use auth::*;
 pub(crate) use client::*;
 pub(crate) use data::*;
 pub(crate) use system::*;
+pub(crate) use github::*;
+pub(crate) use modrinth_cmd::*;
+pub(crate) use server_cmd::*;
+pub(crate) mod tunnel_cmd;
+pub(crate) mod social_cmd;
+pub(crate) use tunnel_cmd::*;
+pub(crate) use social_cmd::*;
+pub(crate) mod server_mods_cmd;
+pub(crate) use server_mods_cmd::*;
+pub(crate) mod server_backup_cmd;
+pub(crate) use server_backup_cmd::*;
+pub(crate) mod server_world_cmd;
+pub(crate) use server_world_cmd::*;
+pub(crate) mod server_files_cmd;
+pub(crate) use server_files_cmd::*;
+pub(crate) mod rcon_cmd;
+pub(crate) use rcon_cmd::*;

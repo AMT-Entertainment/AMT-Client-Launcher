@@ -58,10 +58,10 @@ where
     debug!("Response received from url");
 
     let max_len = response.content_length().unwrap_or(0);
-    let mut output = Vec::with_capacity(max_len as usize);
+    let mut output = Vec::with_capacity(max_len.max(1) as usize);
     let mut curr_len = 0;
 
-    on_progress(0, max_len);
+    on_progress(0, max_len.max(1));
 
     debug!("Reading data from response chunk...");
     while let Some(data) = response.chunk().await

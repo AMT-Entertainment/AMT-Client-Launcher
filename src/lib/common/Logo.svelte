@@ -1,7 +1,5 @@
-<img class="logo" src="img/logo.svg" alt="logo">
+<script>
+    import AMTLogo from "../amt/Logo.svelte";
+</script>
 
-<style>
-    .logo {
-        height: 50px;
-    }
-</style>
+<AMTLogo />
