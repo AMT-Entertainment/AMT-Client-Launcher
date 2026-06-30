@@ -54,6 +54,7 @@ struct DeviceCodeResponse {
     device_code: String,
     user_code: String,
     verification_uri: String,
+    #[allow(dead_code)]
     expires_in: u64,
     interval: u64,
 }
