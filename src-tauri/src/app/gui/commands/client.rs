@@ -341,7 +341,11 @@ pub(crate) async fn run_client(
 
     let mut jvm_args = options.start_options.jvm_args.unwrap_or_else(|| vec![]);
     jvm_args.push(format!("-Dcom.amt.client.badge={}", options.amt_options.badge));
-    jvm_args.push(format!("-Dcom.amt.client.cape={}", options.amt_options.equipped_cape.unwrap_or_default()));
+    if let Some(ref cape) = options.amt_options.equipped_cape {
+        if !cape.is_empty() {
+            jvm_args.push(format!("-Dcom.amt.client.cape={}", cape));
+        }
+    }
     jvm_args.push(format!("-Dcom.amt.client.uuid={}", uuid));
 
     let parameters = StartParameter {

@@ -52,16 +52,20 @@
                 githubUser={options?.amt_options?.githubRepoOwner || "AMT-Entertainment"}
                 githubRepo={options?.amt_options?.githubRepoName || "AMT-Client-Backend"}
                 {playerUuid}
+                {options}
+                on:capeEquipped={() => options.store()}
             />
         {:else if activeTab === "gallery"}
             <CosmeticsGallery
                 backendUrl={options?.amt_options?.backendUrl || "https://amt-entertainment.github.io/AMT-Client-Backend"}
+                {options}
+                on:capeEquipped={() => options.store()}
             />
         {:else if activeTab === "badge"}
             <div class="badge-section">
                 <BadgeEditor
                     bind:badge={options.amt_options.badge}
-                    bind:accent={options.amt_options.accent_color}
+                    bind:accent={options.amt_options.accentColor}
                 />
                 <div class="badge-actions">
                     <button class="amt-btn amt-btn-primary" on:click={() => options.store()}>

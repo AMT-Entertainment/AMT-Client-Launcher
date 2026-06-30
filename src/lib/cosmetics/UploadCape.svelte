@@ -6,6 +6,7 @@
     export let githubUser = "AMT-Entertainment";
     export let githubRepo = "AMT-Client-Backend";
     export let playerUuid = "steve";
+    export let options = null;
 
     const dispatch = createEventDispatcher();
 
@@ -17,6 +18,8 @@
     let error = "";
     let success = false;
     let capeTitle = "";
+    let lastUploadedCapeId = "";
+    let lastUploadedTitle = "";
 
     onDestroy(() => {
         if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -120,6 +123,8 @@
         uploading = true;
         uploadProgress = 0;
         error = "";
+        lastUploadedCapeId = crypto.randomUUID();
+        lastUploadedTitle = capeTitle.trim();
 
         try {
             const reader = new FileReader();
@@ -135,8 +140,8 @@
                 repoName: githubRepo,
                 eventType: "upload-cape",
                 payload: {
-                    cape_id: crypto.randomUUID(),
-                    cape_title: capeTitle.trim(),
+                    cape_id: lastUploadedCapeId,
+                    cape_title: lastUploadedTitle,
                     cape_data: base64,
                     author: playerUuid,
                     user_uuid: playerUuid,
@@ -149,20 +154,27 @@
 
             uploadProgress = 100;
             success = true;
-            dispatch("capeUploaded", { title: capeTitle });
-
-            // Reset after delay
-            setTimeout(() => {
-                removeFile();
-                uploading = false;
-                uploadProgress = 0;
-                success = false;
-            }, 2000);
+            dispatch("capeUploaded", { title: lastUploadedTitle, id: lastUploadedCapeId });
         } catch (err) {
             uploading = false;
             uploadProgress = 0;
             error = String(err);
+            lastUploadedCapeId = "";
+            lastUploadedTitle = "";
         }
+    }
+
+    function equipLastUpload() {
+        if (!options || !lastUploadedCapeId) return;
+        options.amt_options.equippedCape = lastUploadedCapeId;
+        options.store();
+        dispatch("capeEquipped", { id: lastUploadedCapeId, title: lastUploadedTitle });
+        setTimeout(() => {
+            removeFile();
+            uploading = false;
+            uploadProgress = 0;
+            success = false;
+        }, 1000);
     }
 </script>
 
@@ -175,7 +187,8 @@
     {#if success}
         <div class="success-banner">
             <span class="success-icon">✓</span>
-            <span>Cape "{capeTitle}" published! It will appear in the gallery shortly.</span>
+            <span>Cape "{lastUploadedTitle}" published!</span>
+            <button class="equip-btn" on:click={equipLastUpload}>Equip Now</button>
         </div>
     {/if}
 
@@ -300,6 +313,23 @@
         color: #81c784;
         font-size: 13px;
         font-weight: 500;
+    }
+
+    .equip-btn {
+        margin-left: auto;
+        padding: 6px 14px;
+        border: 1px solid rgba(172,196,222,0.3);
+        border-radius: 6px;
+        background: rgba(172,196,222,0.15);
+        color: #ACC4DE;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .equip-btn:hover {
+        background: rgba(172,196,222,0.25);
     }
 
     .success-icon {

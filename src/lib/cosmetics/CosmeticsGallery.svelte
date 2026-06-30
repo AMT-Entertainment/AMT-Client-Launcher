@@ -1,8 +1,12 @@
 <script>
     import {onMount} from "svelte";
+    import {createEventDispatcher} from "svelte";
     import {invoke} from "@tauri-apps/api/core";
 
     export let backendUrl = "https://amt-entertainment.github.io/AMT-Client-Backend";
+    export let options = null;
+
+    const dispatch = createEventDispatcher();
 
     let capes = [];
     let filter = "newest";
@@ -45,6 +49,22 @@
     function getCapeImage(cape) {
         return cape.thumbnail || `${backendUrl}/assets/capes/${cape.id}.png`;
     }
+
+    function equipCape(cape) {
+        if (!options) return;
+        options.amt_options.equippedCape = cape.id;
+        options.store();
+        dispatch("capeEquipped", { id: cape.id, title: cape.title });
+    }
+
+    function unequipCape() {
+        if (!options) return;
+        options.amt_options.equippedCape = "";
+        options.store();
+        dispatch("capeEquipped", { id: "", title: "" });
+    }
+
+    $: isEquipped = options?.amt_options?.equippedCape === selectedCape?.id;
 
     onMount(loadGallery);
 </script>
@@ -101,6 +121,17 @@
                                 <span><b>Author:</b> {cape.author || "Unknown"}</span>
                                 <span><b>Votes:</b> ♥ {cape.votes || 0}</span>
                                 <span><b>Uploaded:</b> {cape.uploadDate ? new Date(cape.uploadDate).toLocaleDateString() : 'Unknown'}</span>
+                                <div class="equip-actions">
+                                    {#if isEquipped}
+                                        <button class="equip-btn unequip" on:click|stopPropagation={unequipCape}>
+                                            Unequip
+                                        </button>
+                                    {:else}
+                                        <button class="equip-btn" on:click|stopPropagation={() => equipCape(cape)}>
+                                            Equip Cape
+                                        </button>
+                                    {/if}
+                                </div>
                             </div>
                         </div>
                     {/if}
@@ -286,5 +317,35 @@
 
     .cape-full-info b {
         color: rgba(255,255,255,0.7);
+    }
+
+    .equip-actions {
+        margin-top: 8px;
+    }
+
+    .equip-btn {
+        padding: 6px 16px;
+        border: 1px solid rgba(172,196,222,0.3);
+        border-radius: 6px;
+        background: rgba(172,196,222,0.1);
+        color: #ACC4DE;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .equip-btn:hover {
+        background: rgba(172,196,222,0.2);
+    }
+
+    .equip-btn.unequip {
+        border-color: rgba(255,100,100,0.3);
+        background: rgba(255,100,100,0.1);
+        color: #ff6b6b;
+    }
+
+    .equip-btn.unequip:hover {
+        background: rgba(255,100,100,0.2);
     }
 </style>
